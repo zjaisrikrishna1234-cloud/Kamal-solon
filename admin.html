@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Admin – Kamal Hair Dresser</title>
+<style>
+:root{--bg:#FAFAF7;--g:#173D32;--g2:#245443;--k:#171717;--s:#9DB4A0;--sl:#E6EDE3;--mu:#5d6862;--ln:#e2e5dc;box-sizing:border-box}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--k);font:15px/1.5 'Helvetica Neue',Arial,sans-serif;padding-bottom:40px}
+[hidden]{display:none!important}
+h1,h2,h3{font-family:Georgia,serif;font-weight:400;margin:0}
+header{background:var(--g);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+header b{font:400 18px Georgia,serif}.wrap{max-width:900px;margin:auto;padding:16px}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:12px 16px;background:#fff;border-bottom:1px solid var(--ln);position:sticky;top:50px;z-index:9}
+.tabs button{border:1px solid var(--ln);background:#fff;border-radius:30px;padding:8px 16px;font-size:14px;cursor:pointer;white-space:nowrap}
+.tabs button.on{background:var(--g);color:#fff;border-color:var(--g)}
+.btn{border:1px solid var(--g);background:var(--g);color:#fff;border-radius:30px;padding:9px 16px;font-size:14px;cursor:pointer}
+.btn.o{background:#fff;color:var(--g)}.btn.r{background:#fff;color:#b3261e;border-color:#b3261e}.btn.sm{padding:6px 12px;font-size:13px}
+.btn:disabled{opacity:.5}
+input,select,textarea{font:16px Arial,sans-serif;border:1px solid var(--ln);border-radius:10px;padding:10px;background:#fff;color:var(--k);width:100%}
+label{display:grid;gap:4px;font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:.06em}
+.card{background:#fff;border:1px solid var(--ln);border-radius:16px;padding:16px;margin-bottom:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.pill{font-size:12px;border-radius:20px;padding:2px 10px;background:var(--sl);color:var(--g);font-weight:600}
+.pill.pending{background:#fff1d6;color:#8a5a00}.pill.cancelled,.pill.no_show{background:#fde3e0;color:#b3261e}.pill.completed{background:#dbe6ff;color:#23408e}
+.meta{color:var(--mu);font-size:13px}.stats{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}.stat{background:var(--sl);border-radius:14px;padding:10px 16px}.stat b{display:block;font:400 24px Georgia,serif;color:var(--g)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--k);color:#fff;padding:12px 18px;border-radius:30px;z-index:50;max-width:90%}.toast.e{background:#b3261e}
+.login{max-width:380px;margin:12vh auto;padding:0 16px}
+.chk{display:flex;gap:6px;align-items:center;text-transform:none;font-size:14px;color:var(--k);letter-spacing:0}.chk input{width:auto}
+</style>
+</head>
+<body>
+<div class="login" id="lg">
+  <div class="card">
+    <h1 style="font-size:28px;margin-bottom:4px">Admin Login</h1>
+    <p class="meta">Kamal Hair Dresser</p>
+    <form id="lf" style="display:grid;gap:12px">
+      <label>Email<input id="em" type="email" autocomplete="username" required></label>
+      <label>Password<input id="pw" type="password" autocomplete="current-password" required></label>
+      <div class="meta" id="le" style="color:#b3261e" role="alert"></div>
+      <button class="btn" id="lb" type="submit">Log in</button>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header><b>Kamal Hair Dresser · Admin</b><button class="btn o sm" id="out">Log out</button></header>
+  <div class="tabs" id="tabs"></div>
+  <div class="wrap" id="view"></div>
+</div>
+<div class="toast" id="tt" hidden></div>
+
+<script>
+const SB="https://tlmsduzbclscitgjpwds.supabase.co";
+const KEY="sb_publishable_iug0z3VS6GXUTXOfl2AX5g_PRqeq1rd"; // publishable key only; admin access is enforced by login + database rules
+const $=id=>document.getElementById(id);
+const el=(t,p,...c)=>{const e=document.createElement(t);for(const k in p||{}){const v=p[k];if(k==="class")e.className=v;else if(k.startsWith("on"))e[k]=v;else if(k==="value"||k==="checked"||k==="disabled")e[k]=v;else e.setAttribute(k,v)}c.flat().forEach(x=>{if(x!=null)e.append(x)});return e};
+const toast=(m,err)=>{const t=$("tt");t.textContent=m;t.className="toast"+(err?" e":"");t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,3500)};
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const toMin=t=>{const [h,m]=t.split(":").map(Number);return h*60+m};
+const hhmm=n=>String(Math.floor(n/60)).padStart(2,"0")+":"+String(n%60).padStart(2,"0");
+const f12=t=>{const n=toMin(t),h=Math.floor(n/60);return ((h+11)%12+1)+":"+String(n%60).padStart(2,"0")+" "+(h<12?"AM":"PM")};
+const money=p=>p==null?"—":"₹"+Number(p);
+let T=null,tab="bookings",timer=null,SV=[],BR=[];
+
+async function auth(grant,body){
+  const r=await fetch(SB+"/auth/v1/token?grant_type="+grant,{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const j=await r.json();if(!r.ok)throw new Error(j.error_description||j.msg||"Login failed");
+  T={access:j.access_token,refresh:j.refresh_token,exp:Date.now()+(j.expires_in-60)*1000};localStorage.setItem("khd_r",T.refresh);
+}
+async function q(path,opt){
+  if(!T)throw new Error("Please log in again.");
+  if(Date.now()>T.exp)await auth("refresh_token",{refresh_token:T.refresh});
+  const r=await fetch(SB+"/rest/v1/"+path,Object.assign({},opt,{headers:{apikey:KEY,Authorization:"Bearer "+T.access,"Content-Type":"application/json",Prefer:"return=representation"}}));
+  const t=await r.text();let j=null;try{j=t?JSON.parse(t):null}catch(e){}
+  if(!r.ok){const m=(j&&j.message)||"Request failed";throw new Error(/exclusion/.test(m)?"That time slot is already taken for this barber.":m)}
+  return j;
+}
+const body=o=>({method:"PATCH",body:JSON.stringify(o)});
+const post=o=>({method:"POST",body:JSON.stringify(o)});
+
+async function enter(){
+  const ok=await q("rpc/is_admin",post({}));
+  if(ok!==true){localStorage.removeItem("khd_r");T=null;throw new Error("This account is not an admin.")}
+  $("lg").hidden=true;$("app").hidden=false;
+  const [sv,br]=await Promise.all([q("services?select=*&order=sort,id"),q("barbers?select=*&order=id")]);SV=sv;BR=br;
+  const names={bookings:"Bookings",services:"Services & Prices",barbers:"Barbers",settings:"Hours & Holidays"};
+  $("tabs").textContent="";
+  Object.keys(names).forEach(k=>$("tabs").append(el("button",{class:k===tab?"on":"",onclick:()=>{tab=k;enter2()}},names[k])));
+  show();
+}
+async function enter2(){[...$("tabs").children].forEach((b,i)=>b.className=Object.keys({bookings:1,services:1,barbers:1,settings:1})[i]===tab?"on":"");show()}
+function show(){clearInterval(timer);const v=$("view");v.textContent="";({bookings:vBookings,services:vServices,barbers:vBarbers,settings:vSettings})[tab]().catch(e=>toast(e.message,1))}
+
+// ---------- Bookings ----------
+const ST={pending:"Pending",approved:"Approved",completed:"Completed",no_show:"No-show",cancelled:"Cancelled"};
+async function vBookings(){
+  const v=$("view");
+  const fl=el("select",{id:"bf"},el("option",{value:"upcoming"},"Today & upcoming"),el("option",{value:"all"},"All bookings"));
+  const st=el("select",{id:"bs"},el("option",{value:""},"All statuses"),Object.keys(ST).map(k=>el("option",{value:k},ST[k])));
+  const dt=el("input",{id:"bd",type:"date"});
+  const list=el("div",{id:"bl"}),stats=el("div",{class:"stats",id:"bst"}),upd=el("div",{class:"meta",id:"bu"});
+  [fl,st,dt].forEach(x=>x.onchange=load);
+  v.append(el("div",{class:"grid",style:"margin-bottom:12px"},el("label",{},"Show",fl),el("label",{},"Status",st),el("label",{},"Date",dt)),stats,el("div",{class:"row",style:"margin-bottom:10px"},el("button",{class:"btn o sm",onclick:load},"Refresh"),upd),list);
+  async function load(){
+    let p="bookings?select=*,services(name,duration_min),barbers(name)&order=booking_date.asc,start_time.asc&limit=300";
+    if(dt.value)p+="&booking_date=eq."+dt.value;else if(fl.value==="upcoming")p+="&booking_date=gte."+iso(new Date());
+    if(st.value)p+="&status=eq."+st.value;
+    const rows=await q(p);
+    const today=iso(new Date());
+    stats.textContent="";
+    [["Pending",rows.filter(b=>b.status==="pending").length],["Today",rows.filter(b=>b.booking_date===today&&["pending","approved"].includes(b.status)).length],["Shown",rows.length]].forEach(([a,n])=>stats.append(el("div",{class:"stat"},el("b",{},String(n)),a)));
+    list.textContent="";
+    if(!rows.length)list.append(el("div",{class:"card meta"},"No bookings found."));
+    rows.forEach(b=>list.append(card(b,load)));
+    upd.textContent="Updated "+new Date().toLocaleTimeString()+" · auto-refreshes every 15 seconds";
+  }
+  await load();
+  timer=setInterval(()=>{if(!document.hidden&&tab==="bookings")load().catch(()=>{})},15000);
+}
+function card(b,reload){
+  const act=async(o,ok)=>{try{await q("bookings?id=eq."+b.id,body(o));toast(ok||"Updated");reload()}catch(e){toast(e.message,1)}};
+  const wa="https://wa.me/91"+b.mobile+"?text="+encodeURIComponent("Hello "+b.customer_name+", your booking "+b.ref+" at Kamal Hair Dresser on "+b.booking_date+" "+f12(b.start_time)+" is "+(b.status==="approved"?"confirmed.":"being reviewed."));
+  const price=el("input",{type:"number",min:"0",step:"1",placeholder:"₹ price",value:b.price==null?"":b.price,style:"width:110px"});
+  const rs=el("div",{class:"row",hidden:"",style:"margin-top:8px"});
+  const rd=el("input",{type:"date",value:b.booking_date,style:"width:auto"}),rt=el("input",{type:"time",value:b.start_time.slice(0,5),style:"width:auto"});
+  rs.append(rd,rt,el("button",{class:"btn sm",onclick:()=>{const s=toMin(rt.value);act({booking_date:rd.value,start_time:rt.value,end_time:hhmm(s+b.services.duration_min)},"Rescheduled")}},"Save"));
+  const live=["pending","approved"].includes(b.status);
+  return el("div",{class:"card"},
+    el("div",{class:"row",style:"justify-content:space-between"},el("b",{},b.customer_name),el("span",{class:"pill "+b.status},ST[b.status])),
+    el("div",{class:"meta"},b.ref+" · "+b.services.name+" · "+(b.barbers?b.barbers.name:"")),
+    el("div",{style:"margin:6px 0"},el("b",{},b.booking_date+" · "+f12(b.start_time)+" – "+f12(b.end_time))),
+    el("div",{class:"row"},el("a",{href:"tel:"+b.mobile},"📞 "+b.mobile),el("a",{href:wa,target:"_blank",rel:"noopener"},"WhatsApp")),
+    b.notes?el("div",{class:"meta"},"Note: "+b.notes):null,
+    el("div",{class:"row",style:"margin-top:10px"},price,el("button",{class:"btn o sm",onclick:()=>act({price:price.value===""?null:Number(price.value)},"Price saved")},"Save price")),
+    el("div",{class:"row",style:"margin-top:10px"},
+      b.status==="pending"?el("button",{class:"btn sm",onclick:()=>act({status:"approved"},"Approved")},"Approve"):null,
+      b.status==="approved"?el("button",{class:"btn sm",onclick:()=>act({status:"completed"},"Marked completed")},"Completed"):null,
+      b.status==="approved"?el("button",{class:"btn o sm",onclick:()=>act({status:"no_show"},"Marked no-show")},"No-show"):null,
+      live?el("button",{class:"btn o sm",onclick:()=>{rs.hidden=!rs.hidden}},"Reschedule"):null,
+      live?el("button",{class:"btn r sm",onclick:()=>{if(confirm("Cancel this booking?"))act({status:"cancelled"},"Cancelled")}},"Cancel"):null),
+    rs);
+}
+
+// ---------- Services ----------
+async function vServices(){
+  const v=$("view");
+  v.append(el("p",{class:"meta"},"Set prices and durations here. Turn a service off to hide it from the website. Leave the price empty to show 'Price at salon'."));
+  const mkRow=(s)=>{
+    const n=el("input",{value:s.name||"",placeholder:"Service name"}),d=el("input",{value:s.description||"",placeholder:"Description"}),
+      du=el("input",{type:"number",min:"5",step:"5",value:s.duration_min||30}),pr=el("input",{type:"number",min:"0",step:"1",value:s.price==null?"":s.price,placeholder:"₹"}),
+      so=el("input",{type:"number",value:s.sort||0}),ac=el("input",{type:"checkbox",checked:s.active!==false});
+    const save=async()=>{
+      const o={name:n.value.trim(),description:d.value.trim()||null,duration_min:Number(du.value),price:pr.value===""?null:Number(pr.value),sort:Number(so.value),active:ac.checked};
+      if(!o.name||!(o.duration_min>0)){toast("Enter a name and duration.",1);return}
+      try{await q(s.id?"services?id=eq."+s.id:"services",s.id?body(o):post(o));toast("Saved");vReload()}catch(e){toast(e.message,1)}
+    };
+    return el("div",{class:"card"},el("div",{class:"grid"},el("label",{},"Name",n),el("label",{},"Description",d),el("label",{},"Minutes",du),el("label",{},"Price ₹",pr),el("label",{},"Order",so)),
+      el("div",{class:"row",style:"margin-top:10px"},el("label",{class:"chk"},ac,"Show on website"),el("button",{class:"btn sm",onclick:save},s.id?"Save":"Add service")));
+  };
+  v.append(el("h3",{style:"margin:6px 0 10px"},"Add new service"),mkRow({}),el("h3",{style:"margin:16px 0 10px"},"Your services"));
+  (await q("services?select=*&order=sort,id")).forEach(s=>v.append(mkRow(s)));
+}
+const vReload=()=>{show()};
+
+// ---------- Barbers ----------
+async function vBarbers(){
+  const v=$("view");
+  const mk=(b)=>{const n=el("input",{value:b.name||"",placeholder:"Barber name"}),ac=el("input",{type:"checkbox",checked:b.active!==false});
+    return el("div",{class:"card"},el("div",{class:"row"},el("div",{style:"flex:1;min-width:160px"},n),el("label",{class:"chk"},ac,"Active"),
+      el("button",{class:"btn sm",onclick:async()=>{if(!n.value.trim()){toast("Enter a name.",1);return}
+        try{await q(b.id?"barbers?id=eq."+b.id:"barbers",b.id?body({name:n.value.trim(),active:ac.checked}):post({name:n.value.trim(),active:ac.checked}));toast("Saved");vReload()}catch(e){toast(e.message,1)}}},b.id?"Save":"Add barber")))};
+  v.append(el("p",{class:"meta"},"Customers choose a barber only when more than one is active."),el("h3",{style:"margin:6px 0 10px"},"Add barber"),mk({}),el("h3",{style:"margin:16px 0 10px"},"Barbers"));
+  (await q("barbers?select=*&order=id")).forEach(b=>v.append(mk(b)));
+}
+
+// ---------- Settings & holidays ----------
+async function vSettings(){
+  const v=$("view");const s=(await q("settings?select=*&id=eq.1"))[0];
+  const f={salon_name:el("input",{value:s.salon_name||""}),phone:el("input",{value:s.phone||""}),whatsapp:el("input",{value:s.whatsapp||"",placeholder:"919XXXXXXXXX"}),address:el("input",{value:s.address||""}),
+    open_time:el("input",{type:"time",value:s.open_time.slice(0,5)}),close_time:el("input",{type:"time",value:s.close_time.slice(0,5)}),
+    slot_interval:el("input",{type:"number",min:"5",step:"5",value:s.slot_interval}),max_days_ahead:el("input",{type:"number",min:"1",value:s.max_days_ahead})};
+  const days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];const off=days.map((d,i)=>el("input",{type:"checkbox",checked:(s.weekly_off||[]).includes(i)}));
+  v.append(el("div",{class:"card"},el("h3",{style:"margin-bottom:10px"},"Salon details & timing"),
+    el("div",{class:"grid"},el("label",{},"Salon name",f.salon_name),el("label",{},"Phone",f.phone),el("label",{},"WhatsApp (with 91)",f.whatsapp),el("label",{},"Address",f.address),
+      el("label",{},"Opening time",f.open_time),el("label",{},"Closing time",f.close_time),el("label",{},"Slot interval (min)",f.slot_interval),el("label",{},"Book up to (days ahead)",f.max_days_ahead)),
+    el("p",{class:"meta",style:"margin:12px 0 4px"},"Weekly off days"),el("div",{class:"row"},days.map((d,i)=>el("label",{class:"chk"},off[i],d))),
+    el("div",{style:"margin-top:12px"},el("button",{class:"btn",onclick:async()=>{
+      const o={salon_name:f.salon_name.value.trim(),phone:f.phone.value.trim()||null,whatsapp:f.whatsapp.value.replace(/\D/g,"")||null,address:f.address.value.trim()||null,
+        open_time:f.open_time.value,close_time:f.close_time.value,slot_interval:Number(f.slot_interval.value),max_days_ahead:Number(f.max_days_ahead.value),weekly_off:off.map((c,i)=>c.checked?i:-1).filter(i=>i>=0)};
+      if(!o.open_time||!o.close_time||o.close_time<=o.open_time){toast("Closing time must be after opening time.",1);return}
+      try{await q("settings?id=eq.1",body(o));toast("Settings saved")}catch(e){toast(e.message,1)}}},"Save settings"))));
+  const hd=el("input",{type:"date"}),hn=el("input",{placeholder:"Reason (optional)"}),hl=el("div");
+  const loadH=async()=>{hl.textContent="";const hs=await q("holidays?select=*&order=day");if(!hs.length)hl.append(el("p",{class:"meta"},"No holidays added."));
+    hs.forEach(h=>hl.append(el("div",{class:"row",style:"margin:6px 0"},el("span",{style:"flex:1"},h.day+(h.note?" · "+h.note:"")),el("button",{class:"btn r sm",onclick:async()=>{try{await q("holidays?day=eq."+h.day,{method:"DELETE"});loadH()}catch(e){toast(e.message,1)}}},"Remove"))))};
+  v.append(el("div",{class:"card"},el("h3",{style:"margin-bottom:10px"},"Holidays"),el("div",{class:"row"},hd,hn,el("button",{class:"btn sm",onclick:async()=>{if(!hd.value){toast("Choose a date.",1);return}
+    try{await q("holidays",post({day:hd.value,note:hn.value.trim()||null}));hd.value="";hn.value="";loadH()}catch(e){toast("Could not add (date may already exist).",1)}}},"Add")),hl));
+  loadH();
+}
+
+// ---------- login ----------
+function logout(){T=null;localStorage.removeItem("khd_r");clearInterval(timer);$("app").hidden=true;$("lg").hidden=false}
+$("out").onclick=logout;
+$("lf").onsubmit=async e=>{e.preventDefault();$("le").textContent="";$("lb").disabled=true;
+  try{await auth("password",{email:$("em").value.trim(),password:$("pw").value});await enter();$("pw").value=""}catch(x){$("le").textContent=x.message}$("lb").disabled=false};
+(async()=>{const r=localStorage.getItem("khd_r");if(!r)return;try{await auth("refresh_token",{refresh_token:r});await enter()}catch(e){logout()}})();
+</script>
+</body>
+</html>
